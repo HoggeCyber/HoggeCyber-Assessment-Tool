@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Health Check Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Your Cybersecurity Health Report</h1>
+    <p>Score: {{ score }}/100</p>
+    <ul>
+    {% for check, result in results.items() %}
+        <li>{{ check }}: {{ result }}</li>
+    {% endfor %}
+    </ul>
+    <a href="{{ url_for('static', filename=report.split('/')[-1]) }}" download>Download Report</a>
+    <br><a href="/">Run Another Check</a>
+</body>
+</html>
