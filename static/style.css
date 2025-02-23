@@ -1,12 +1,26 @@
 body {
-    font-family: Arial, sans-serif;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
+    background-color: #f0f2f5;
+    font-family: 'Arial', sans-serif;
 }
-h1 { color: #333; }
-input, button { margin: 10px 0; padding: 8px; }
-button { background-color: #007bff; color: white; border: none; cursor: pointer; }
-button:hover { background-color: #0056b3; }
-ul { list-style-type: none; padding: 0; }
-li { margin: 10px 0; }
+h1 {
+    font-weight: bold;
+    color: #1a3c34;
+}
+.card {
+    border-radius: 10px;
+    background-color: #fff;
+}
+.btn-primary {
+    background-color: #1a73e8;
+    border: none;
+}
+.btn-primary:hover {
+    background-color: #1557b0;
+}
+.progress-bar {
+    background-color: #28a745;
+}
+.list-group-item {
+    border-left: 4px solid #1a73e8;
+    margin-bottom: 5px;
+}
