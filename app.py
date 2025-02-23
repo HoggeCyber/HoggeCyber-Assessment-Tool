@@ -2,6 +2,9 @@ from flask import Flask, request, render_template
 import requests
 import dns.resolver
 import socket
+import ssl
+import datetime
+import whois
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from virustotal_python import Virustotal
@@ -119,19 +122,16 @@ def check_ports(url):
         logger.error(f"Port scan failed for {url}: {e}")
         return "Error scanning ports", 0
 
-# Phishing Risk Check (Fixed for VirusTotal v3)
+# Phishing Risk Check
 def check_phishing(url):
     api_key = os.getenv("VIRUSTOTAL_API_KEY")
     if not api_key:
         logger.error("VirusTotal API key not set in environment")
         return "VirusTotal API key not configured", 0
     try:
-        # Use API_KEY instead of api_key
         vt = Virustotal(API_KEY=api_key, API_VERSION="v3")
-        # Submit URL for scanning
         resp = vt.request("urls", data={"url": f"https://{url}"}, method="POST")
         url_id = resp.data["id"]
-        # Get analysis results
         analysis = vt.request(f"analyses/{url_id}")
         stats = analysis.data["attributes"]["stats"]
         if stats["malicious"] > 0 or stats["suspicious"] > 0:
@@ -141,6 +141,35 @@ def check_phishing(url):
         logger.error(f"Phishing check failed for {url}: {e}")
         return "Error checking phishing status", 0
 
+# SSL Certificate Expiry Check
+def check_ssl_expiry(url):
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((url, 443)) as sock:
+            with context.wrap_socket(sock, server_hostname=url) as ssock:
+                cert = ssock.getpeercert()
+                expiry_date = datetime.datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z")
+                days_left = (expiry_date - datetime.datetime.utcnow()).days
+                if days_left > 90:
+                    return f"SSL certificate valid ({days_left} days left)", 25
+                elif days_left > 30:
+                    return f"SSL certificate nearing expiry ({days_left} days left)", 10
+                return f"SSL certificate expires soon ({days_left} days left)", 0
+    except Exception as e:
+        logger.error(f"SSL expiry check failed for {url}: {e}")
+        return "Error checking SSL expiry", 0
+
+# WHOIS Privacy Check
+def check_whois_privacy(url):
+    try:
+        w = whois.whois(url)
+        if not w.registrar or "redacted" in str(w.registrant_name).lower() or "privacy" in str(w.registrar).lower():
+            return "WHOIS data is private", 25
+        return "WHOIS data is public", 10  # Public data isn’t inherently bad, but less secure
+    except Exception as e:
+        logger.error(f"WHOIS check failed for {url}: {e}")
+        return "Error checking WHOIS privacy", 0
+
 # Generate PDF Report
 def create_report(results, score, filename="static/report.pdf"):
     c = canvas.Canvas(filename, pagesize=letter)
@@ -148,7 +177,7 @@ def create_report(results, score, filename="static/report.pdf"):
     c.setFont("Helvetica-Bold", 16)
     c.drawString(100, 750, "HoggeCyber Cybersecurity Health Report")
     c.setFont("Helvetica", 12)
-    c.drawString(100, 730, f"Score: {score}/200")
+    c.drawString(100, 730, f"Score: {score}/250")  # Updated for 10 checks
     y = 700
     for check, result in results.items():
         c.drawString(100, y, f"{check}: {result}")
@@ -173,6 +202,8 @@ def health_check():
         pwd_result, pwd_score = check_password(password)
         ports_result, ports_score = check_ports(url)
         phishing_result, phishing_score = check_phishing(url)
+        ssl_expiry_result, ssl_expiry_score = check_ssl_expiry(url)
+        whois_result, whois_score = check_whois_privacy(url)
         
         results["SSL Status"] = ssl_result
         results["Security Headers"] = headers_result
@@ -182,11 +213,14 @@ def health_check():
         results["Password Strength"] = pwd_result
         results["Open Ports"] = ports_result
         results["Phishing Risk"] = phishing_result
+        results["SSL Expiry"] = ssl_expiry_result
+        results["WHOIS Privacy"] = whois_result
         
         total_score = int(ssl_score + headers_score + spf_score + dmarc_score + 
-                         dkim_score + pwd_score + ports_score + phishing_score)
+                         dkim_score + pwd_score + ports_score + phishing_score + 
+                         ssl_expiry_score + whois_score)
         
-        logger.debug(f"Total score for {url}: {total_score}/200")
+        logger.debug(f"Total score for {url}: {total_score}/250")
         report_path = create_report(results, total_score)
         return render_template("results.html", results=results, score=total_score, report=report_path)
     return render_template("index.html")
